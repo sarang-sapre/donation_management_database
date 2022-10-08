@@ -1,0 +1,1299 @@
+-- --------------------------------------------------------
+-- Host:                         127.0.0.1
+-- Server version:               8.0.28 - MySQL Community Server - GPL
+-- Server OS:                    Win64
+-- HeidiSQL Version:             11.3.0.6295
+-- --------------------------------------------------------
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+
+-- Dumping database structure for ngo
+DROP DATABASE IF EXISTS `ngo`;
+CREATE DATABASE IF NOT EXISTS `ngo` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `ngo`;
+
+-- Dumping structure for table ngo.donation_type
+DROP TABLE IF EXISTS `donation_type`;
+CREATE TABLE IF NOT EXISTS `donation_type` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `DONATION_TYPE` varchar(50) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='donation type b/w  Gov or private';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for procedure ngo.ngo_add_product
+DROP PROCEDURE IF EXISTS `ngo_add_product`;
+DELIMITER //
+CREATE PROCEDURE `ngo_add_product`(
+	IN `in_product_name` VARCHAR(256)
+)
+BEGIN
+
+INSERT INTO products(PRODUCT_NM)
+SELECT in_product_name;
+
+UPDATE products
+SET PRODUCT_ORDER = ID;
+
+SELECT 1 AS `status` , 'Record Added' AS Msg;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_add_record
+DROP PROCEDURE IF EXISTS `ngo_add_record`;
+DELIMITER //
+CREATE PROCEDURE `ngo_add_record`(
+	IN `in_record_type` INT,
+	IN `in_donation_type` INT,
+	IN `in_product` INT,
+	IN `in_quantity` INT,
+	IN `in_person_count` INT,
+	IN `in_amount` BIGINT,
+	IN `in_record_date` DATE
+)
+BEGIN
+
+DECLARE temp_count INT ;
+
+SET temp_count = (SELECT COUNT(*) FROM ngo_records WHERE RECORD_TYPE = 2 AND RECORD_DATE = in_record_date AND PRODUCT_ID = in_product);
+
+
+if(temp_count <> 0)THEN
+
+SELECT 0 AS `status` , 'Duplicate Record Cannot be Added' AS Msg;
+
+
+ELSE
+
+INSERT INTO `ngo_records` (`RECORD_TYPE`, `PERSON_COUNT`, `CREATE_DATE`, `DONATION_TYPE`, `PRODUCT_ID`, `QUANTITY`, `RECORD_DATE`,`AMOUNT`) 
+SELECT in_record_type, in_person_count, NOW(),in_donation_type,in_product,in_quantity,in_record_date,in_amount;
+
+SELECT 1 AS `status` , 'Record Added' AS Msg;
+
+END IF;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for table ngo.ngo_config
+DROP TABLE IF EXISTS `ngo_config`;
+CREATE TABLE IF NOT EXISTS `ngo_config` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `KEY` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `VALUE` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Data exporting was unselected.
+
+-- Dumping structure for procedure ngo.ngo_get_combine_report
+DROP PROCEDURE IF EXISTS `ngo_get_combine_report`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_combine_report`(
+	IN `in_interval_type` VARCHAR(50),
+	IN `in_donation_type` INT,
+	IN `in_month` VARCHAR(50),
+	IN `in_year` VARCHAR(50),
+	IN `in_date_from` VARCHAR(50),
+	IN `in_date_to` VARCHAR(50)
+)
+BEGIN
+
+
+CALL `ngo_get_donation_report`(in_interval_type, in_donation_type, in_month, in_year, in_date_from, in_date_to);
+
+CALL `ngo_get_donation_report`(in_interval_type, in_donation_type, in_month, in_year, in_date_from, in_date_to);
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_consumtion
+DROP PROCEDURE IF EXISTS `ngo_get_consumtion`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_consumtion`(
+	IN `in_from_date` DATE,
+	IN `in_to_date` DATE
+)
+    COMMENT 'Get donations by date'
+BEGIN
+
+
+SELECT * FROM ngo_records a WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= in_from_date AND a.RECORD_DATE <= in_to_date ;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_donation
+DROP PROCEDURE IF EXISTS `ngo_get_donation`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_donation`(
+	IN `in_from_date` VARCHAR(50),
+	IN `in_to_date` VARCHAR(50)
+)
+    COMMENT 'Get donations by date'
+BEGIN
+
+SET @to_date = (SELECT IF(in_to_date='' OR in_to_date IS NULL ,DATE_ADD(DATE(NOW()),INTERVAL 1 DAY),in_to_date));
+SET @from_date = (SELECT IF(in_from_date='' OR in_from_date IS NULL ,DATE_SUB(DATE(NOW()),interval 1 DAY),in_from_date));
+
+SET @SQL = CONCAT("SELECT a.RECORD_ID,b.DONATION_TYPE,p.PRODUCT_NM,DATE_FORMAT(DATE(a.RECORD_DATE),'%d-%m-%Y') AS RECORD_DATE,a.QUANTITY,a.AMOUNT,a.PERSON_COUNT FROM ngo_records a LEFT JOIN donation_type b ON (a.DONATION_TYPE = b.ID) LEFT JOIN products p ON (a.PRODUCT_ID = p.ID) WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",@from_date,"' AND a.RECORD_DATE <= '",@to_date,"';");
+
+
+PREPARE stmt3 FROM @SQL;
+EXECUTE stmt3;
+DEALLOCATE PREPARE stmt3;
+
+-- CREATE TABLE TEMP_DATE AS SELECT @SQL;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_donation_report
+DROP PROCEDURE IF EXISTS `ngo_get_donation_report`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_donation_report`(
+	IN `in_interval_type` VARCHAR(50),
+	IN `in_donation_type` INT,
+	IN `in_month` VARCHAR(50),
+	IN `in_year` VARCHAR(50),
+	IN `in_date_from` VARCHAR(50),
+	IN `in_date_to` VARCHAR(50)
+)
+BEGIN
+
+
+DECLARE from_date date;
+DECLARE to_date date;
+DECLARE temp_type INt;
+DECLARE temp_filter varchar(100);
+
+
+SET temp_type = (SELECT IF(in_donation_type=2,2,IF(in_donation_type = 1,1,0)));
+
+SET temp_filter = (SELECT IF(temp_type = 0 , CONCAT(' DONATION_TYPE IN (1,2)'), CONCAT(' DONATION_TYPE =',temp_type) )  );
+
+
+
+IF(in_interval_type = 'YEARLY') THEN
+
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-01-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT STR_TO_DATE(CONCAT("31-12-",in_year),'%d-%m-%Y'));
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 month
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY MONTH(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,MONTHNAME(td.Date) AS `month`,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON month(td.Date) = month(tdp.RECORD_DATE)
+;
+
+
+SELECT month,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_data
+GROUP BY `month`
+;
+
+
+ELSE IF(in_interval_type = 'MONTHLY') THEN
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-",in_month,"-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT LAST_DAY(from_date));
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 day
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY DATE(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON DATE(td.Date) = DATE(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_data
+GROUP BY `Date`
+;
+
+
+ELSE
+
+SET from_date = (SELECT STR_TO_DATE(in_date_from,'%Y-%m-%d'));
+SET to_date = (SELECT STR_TO_DATE(in_date_to,'%Y-%m-%d'));
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 month
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY DATE(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON Date(td.Date) = Date(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_data
+GROUP BY `Date`
+;
+
+END IF;
+END IF;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_donation_type
+DROP PROCEDURE IF EXISTS `ngo_get_donation_type`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_donation_type`()
+BEGIN
+
+SELECT * FROM ngo.donation_type;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_product
+DROP PROCEDURE IF EXISTS `ngo_get_product`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_product`(
+	IN `in_search_text` VARCHAR(50)
+)
+BEGIN
+
+
+if(in_search_text = '' OR in_search_text IS NULL) THEN
+
+SELECT * FROM ngo.products;
+
+ELSE
+
+SET @SQL = CONCAT("SELECT * FROM ngo.products WHERE PRODUCT_NM LIKE ('%",in_search_text,"%');");
+
+PREPARE stmt3 FROM @SQL;
+EXECUTE stmt3;
+DEALLOCATE PREPARE stmt3;
+
+END IF;
+
+
+
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_report_data
+DROP PROCEDURE IF EXISTS `ngo_get_report_data`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_report_data`(
+	IN `in_report_type` INT,
+	IN `in_interval_type` VARCHAR(50),
+	IN `in_month` VARCHAR(50),
+	IN `in_year` VARCHAR(50),
+	IN `in_date_from` varchar(50),
+	IN `in_date_to` varchar(50)
+)
+BEGIN
+
+DECLARE from_date date;
+DECLARE to_date date;
+
+IF(in_interval_type = 'YEARLY') THEN
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-01-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT STR_TO_DATE(CONCAT("31-12-",in_year),'%d-%m-%Y'));
+
+ELSE IF(in_interval_type = 'MONTHLY') THEN
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-",in_month,"-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT LAST_DAY(from_date));
+
+ELSE
+
+SET from_date = (SELECT STR_TO_DATE(in_date_from,'%Y-%m-%d'));
+SET to_date = (SELECT STR_TO_DATE(in_date_to,'%Y-%m-%d'));
+
+END IF;
+END IF;
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 day
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+
+-- 1. Donation
+-- 2. Usage
+-- 3. Consolidated
+
+IF(in_report_type = 1)THEN
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' GROUP BY a.RECORD_DATE , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON DATE(td.Date) = DATE(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_data
+GROUP BY `Date`
+;
+
+
+
+
+
+
+ELSE IF(in_report_type = 2)THEN
+
+DROP TEMPORARY TABLE IF EXISTS temp_usage_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_usage_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' GROUP BY a.RECORD_DATE , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_usage_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON DATE(td.Date) = DATE(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_data
+GROUP BY `Date`
+;
+
+
+
+ELSE IF(in_report_type = 3) THEN
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data; 
+DROP TEMPORARY TABLE IF EXISTS temp_usage_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' GROUP BY a.RECORD_DATE , a.PRODUCT_ID;");
+SET @sql_2 = CONCAT("CREATE TEMPORARY TABLE temp_usage_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 1 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' GROUP BY a.RECORD_DATE , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+PREPARE stmt2 FROM @sql_2;
+EXECUTE stmt2;
+DEALLOCATE PREPARE stmt2;
+
+CREATE TEMPORARY TABLE temp_final_data
+SELECT td.*,tdp.*
+FROM temp_dates td
+LEFT JOIN
+(
+SELECT AN.*,pr.PRODUCT_NM
+FROM
+(
+SELECT td.*, (td.QUANTITY - tu.QUANTITY) AS RM_QUANTITY , (td.AMOUNT - tu.AMOUNT) AS RM_AMOUNT ,(td.PERSON_COUNT - tu.PERSON_COUNT) AS RM_PERSON_COUNT
+FROM temp_donation_data td
+INNER JOIN temp_usage_data tu ON td.RECORD_DATE = tu.RECORD_DATE AND td.PRODUCT_ID = tu.PRODUCT_ID
+) AS AN
+INNER JOIN products pr ON AN.PRODUCT_ID = pr.ID
+) AS tdp ON  DATE(td.Date) = DATE(tdp.RECORD_DATE) ;
+
+
+
+
+
+ELSE
+
+SELECT "Something Went Wrong" AS msg , 0 AS `status` ;
+
+END IF;
+END IF;
+END IF;
+
+
+
+
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_usage
+DROP PROCEDURE IF EXISTS `ngo_get_usage`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_usage`(
+	IN `in_from_date` VARCHAR(50),
+	IN `in_to_date` VARCHAR(50)
+)
+    COMMENT 'Get usage by date'
+BEGIN
+
+SET @to_date = (SELECT IF(in_to_date='' OR in_to_date IS NULL ,DATE_ADD(DATE(NOW()),INTERVAL 1 DAY),in_to_date));
+SET @from_date = (SELECT IF(in_from_date='' OR in_from_date IS NULL ,DATE_SUB(DATE(NOW()),interval 1 DAY),in_from_date));
+
+SET @SQL = CONCAT("SELECT a.RECORD_ID,b.DONATION_TYPE AS USAGE_TYPE,p.PRODUCT_NM,DATE_FORMAT(DATE(a.RECORD_DATE),'%d-%m-%Y') AS RECORD_DATE,a.QUANTITY,a.AMOUNT,a.PERSON_COUNT FROM ngo_records a LEFT JOIN donation_type b ON (a.DONATION_TYPE = b.ID) LEFT JOIN products p ON (a.PRODUCT_ID = p.ID) WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= '",@from_date,"' AND a.RECORD_DATE <= '",@to_date,"';");
+
+
+PREPARE stmt3 FROM @SQL;
+EXECUTE stmt3;
+DEALLOCATE PREPARE stmt3;
+
+-- CREATE TABLE TEMP_DATE AS SELECT @SQL;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_get_usage_report
+DROP PROCEDURE IF EXISTS `ngo_get_usage_report`;
+DELIMITER //
+CREATE PROCEDURE `ngo_get_usage_report`(
+	IN `in_interval_type` VARCHAR(50),
+	IN `in_donation_type` INT,
+	IN `in_month` VARCHAR(50),
+	IN `in_year` VARCHAR(50),
+	IN `in_date_from` VARCHAR(50),
+	IN `in_date_to` VARCHAR(50)
+)
+BEGIN
+
+
+DECLARE from_date date;
+DECLARE to_date date;
+DECLARE temp_type INt;
+DECLARE temp_filter varchar(100);
+
+
+SET temp_type = (SELECT IF(in_donation_type=2,2,IF(in_donation_type = 1,1,0)));
+
+SET temp_filter = (SELECT IF(temp_type = 0 , CONCAT(' DONATION_TYPE IN (1,2)'), CONCAT(' DONATION_TYPE =',temp_type) )  );
+
+
+
+IF(in_interval_type = 'YEARLY') THEN
+
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-01-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT STR_TO_DATE(CONCAT("31-12-",in_year),'%d-%m-%Y'));
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 month
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_usage_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY MONTH(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_usage_data
+SELECT td.*,MONTHNAME(td.Date) AS `month`,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON month(td.Date) = month(tdp.RECORD_DATE)
+;
+
+
+SELECT month,
+     COALESCE(PERSON_COUNT,0) AS `person_count`,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_usage_data
+GROUP BY `month`
+;
+
+
+ELSE IF(in_interval_type = 'MONTHLY') THEN
+
+SET from_date = (SELECT STR_TO_DATE(CONCAT("01-",in_month,"-",in_year),'%d-%m-%Y'));
+SET to_date = (SELECT LAST_DAY(from_date));
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 day
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_usage_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY DATE(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_usage_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON DATE(td.Date) = DATE(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+       COALESCE(PERSON_COUNT,0) AS `person_count`,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_usage_data
+GROUP BY `Date`
+;
+
+
+ELSE
+
+SET from_date = (SELECT STR_TO_DATE(in_date_from,'%Y-%m-%d'));
+SET to_date = (SELECT STR_TO_DATE(in_date_to,'%Y-%m-%d'));
+
+DROP TEMPORARY TABLE IF EXISTS temp_dates;
+CREATE TEMPORARY TABLE temp_dates
+WITH recursive Date_Ranges AS (
+    select from_date as Date
+   union all
+   select Date + interval 1 month
+   from Date_Ranges
+   where Date < to_date)
+select * from Date_Ranges;
+
+
+DROP TEMPORARY TABLE IF EXISTS temp_donation_data;
+DROP TEMPORARY TABLE IF EXISTS temp_final_usage_data;
+
+SET @sql_1 = CONCAT("CREATE TEMPORARY TABLE temp_donation_data SELECT a.RECORD_DATE ,a.PRODUCT_ID,SUM(a.QUANTITY) AS QUANTITY ,SUM(a.AMOUNT) AS AMOUNT , SUM(a.PERSON_COUNT) AS PERSON_COUNT FROM ngo_records a WHERE a.RECORD_TYPE = 2 AND a.RECORD_DATE >= '",from_date,"' AND a.RECORD_DATE <= '",to_date,"' AND ",temp_filter," GROUP BY DATE(a.RECORD_DATE) , a.PRODUCT_ID;");
+
+PREPARE stmt1 FROM @sql_1;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
+
+CREATE TEMPORARY TABLE temp_final_usage_data
+SELECT td.*,tdp.*
+FROM temp_dates td 
+LEFT JOIN (
+SELECT a.* , pr.PRODUCT_NM
+FROM temp_donation_data a
+INNER JOIN products pr ON a.PRODUCT_ID = pr.ID
+) AS tdp ON Date(td.Date) = Date(tdp.RECORD_DATE)
+;
+
+
+SELECT Date,
+       COALESCE(PERSON_COUNT,0) AS `person_count`,
+CASE WHEN PRODUCT_NM = 'गहु'  THEN QUANTITY ELSE 0 END AS 'A' ,
+CASE WHEN PRODUCT_NM = 'तांदुळ'  THEN QUANTITY ELSE 0 END AS 'B' ,
+CASE WHEN PRODUCT_NM = 'तुरडाळ'  THEN QUANTITY ELSE 0 END AS 'C' ,
+CASE WHEN PRODUCT_NM = 'पि.मुगडाळ/हि.मुगडाळ'  THEN QUANTITY ELSE 0 END AS 'D' ,
+CASE WHEN PRODUCT_NM = 'मसुरडाळ'  THEN QUANTITY ELSE 0 END AS 'E' ,
+CASE WHEN PRODUCT_NM = 'हरभरा डाळ'  THEN QUANTITY ELSE 0 END AS 'F' ,
+CASE WHEN PRODUCT_NM = 'उडीद डाळ'  THEN QUANTITY ELSE 0 END AS 'I' ,
+CASE WHEN PRODUCT_NM = 'मटकी डाळ'  THEN QUANTITY ELSE 0 END AS 'J' ,
+CASE WHEN PRODUCT_NM = 'मटकी'  THEN QUANTITY ELSE 0 END AS 'K' ,
+CASE WHEN PRODUCT_NM = 'हरभरा'  THEN QUANTITY ELSE 0 END AS 'L' ,
+CASE WHEN PRODUCT_NM = 'छोले'  THEN QUANTITY ELSE 0 END AS 'M' ,
+CASE WHEN PRODUCT_NM = 'वाटाणा'  THEN QUANTITY ELSE 0 END AS 'N' ,
+CASE WHEN PRODUCT_NM = 'चवळी'  THEN QUANTITY ELSE 0 END AS 'O' ,
+CASE WHEN PRODUCT_NM = 'ही. मुग'  THEN QUANTITY ELSE 0 END AS 'P' ,
+CASE WHEN PRODUCT_NM = 'अ. मसुर'  THEN QUANTITY ELSE 0 END AS 'Q' ,
+CASE WHEN PRODUCT_NM = 'राजमा'  THEN QUANTITY ELSE 0 END AS 'R' ,
+CASE WHEN PRODUCT_NM = 'घेवडा'  THEN QUANTITY ELSE 0 END AS 'S' ,
+CASE WHEN PRODUCT_NM = 'गुळ'  THEN QUANTITY ELSE 0 END AS 'T' ,
+CASE WHEN PRODUCT_NM = 'साखर'  THEN QUANTITY ELSE 0 END AS 'U' ,
+CASE WHEN PRODUCT_NM = 'चहापावडर'  THEN QUANTITY ELSE 0 END AS 'V' ,
+CASE WHEN PRODUCT_NM = 'तुप'  THEN QUANTITY ELSE 0 END AS 'W' ,
+CASE WHEN PRODUCT_NM = 'पापड'  THEN QUANTITY ELSE 0 END AS 'X' ,
+CASE WHEN PRODUCT_NM = 'लोणचे'  THEN QUANTITY ELSE 0 END AS 'Y' ,
+CASE WHEN PRODUCT_NM = 'गोड तेल'  THEN QUANTITY ELSE 0 END AS 'Z' ,
+CASE WHEN PRODUCT_NM = 'खोबर'  THEN QUANTITY ELSE 0 END AS 'AA' ,
+CASE WHEN PRODUCT_NM = 'शेंगदाणे'  THEN QUANTITY ELSE 0 END AS 'AB' ,
+CASE WHEN PRODUCT_NM = 'मीठ'  THEN QUANTITY ELSE 0 END AS 'AC' ,
+CASE WHEN PRODUCT_NM = 'रवा'  THEN QUANTITY ELSE 0 END AS 'AD' ,
+CASE WHEN PRODUCT_NM = 'पोहे'  THEN QUANTITY ELSE 0 END AS 'AE' ,
+CASE WHEN PRODUCT_NM = 'साबुदाना/भगर'  THEN QUANTITY ELSE 0 END AS 'AF' ,
+CASE WHEN PRODUCT_NM = 'हा. नुडल्स'  THEN QUANTITY ELSE 0 END AS 'AI' ,
+CASE WHEN PRODUCT_NM = 'शवई-/उपमा शेवाई'  THEN QUANTITY ELSE 0 END AS 'AJ' ,
+CASE WHEN PRODUCT_NM = 'सोयाबिन'  THEN QUANTITY ELSE 0 END AS 'AK' ,
+CASE WHEN PRODUCT_NM = 'हिंग'  THEN QUANTITY ELSE 0 END AS 'AL' ,
+CASE WHEN PRODUCT_NM = 'जिरे'  THEN QUANTITY ELSE 0 END AS 'AM' ,
+CASE WHEN PRODUCT_NM = 'मोहरी'  THEN QUANTITY ELSE 0 END AS 'AN' ,
+CASE WHEN PRODUCT_NM = 'हळद'  THEN QUANTITY ELSE 0 END AS 'AO' ,
+CASE WHEN PRODUCT_NM = 'धनेपावडर'  THEN QUANTITY ELSE 0 END AS 'AP' ,
+CASE WHEN PRODUCT_NM = 'लाल तिखट'  THEN QUANTITY ELSE 0 END AS 'AQ' ,
+CASE WHEN PRODUCT_NM = 'कांदा म.(घरचा म.)'  THEN QUANTITY ELSE 0 END AS 'AR' ,
+CASE WHEN PRODUCT_NM = 'गोडा म.(पनीर म.)/इतर मसाले'  THEN QUANTITY ELSE 0 END AS 'AS' ,
+CASE WHEN PRODUCT_NM = 'गरम म.(किचनकिंग म.)'  THEN QUANTITY ELSE 0 END AS 'AT' ,
+CASE WHEN PRODUCT_NM = 'चिंच, आमसुल'  THEN QUANTITY ELSE 0 END AS 'AU' ,
+CASE WHEN PRODUCT_NM = 'बडिशेप, धनाडाळ'  THEN QUANTITY ELSE 0 END AS 'AV' ,
+CASE WHEN PRODUCT_NM = 'ओवा'  THEN QUANTITY ELSE 0 END AS 'AW' ,
+CASE WHEN PRODUCT_NM = 'जवस'  THEN QUANTITY ELSE 0 END AS 'AX' ,
+CASE WHEN PRODUCT_NM = 'कारळ, तीळ'  THEN QUANTITY ELSE 0 END AS 'AY' ,
+CASE WHEN PRODUCT_NM = 'ज्वारी'  THEN QUANTITY ELSE 0 END AS 'AZ' 
+FROM temp_final_usage_data
+GROUP BY `Date`
+;
+
+END IF;
+END IF;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure ngo.ngo_login_user
+DROP PROCEDURE IF EXISTS `ngo_login_user`;
+DELIMITER //
+CREATE PROCEDURE `ngo_login_user`(
+	IN `in_username` VARCHAR(50),
+	IN `in_password` VARCHAR(50)
+)
+    COMMENT 'Procedure to log in user and get his details .'
+BEGIN
+
+DECLARE temp_password TEXT;
+DECLARE temp_password_salt TEXT;
+DECLARE temp_user_id INT;
+
+SET temp_user_id = (SELECT ID FROM users a WHERE a.USER_ID = in_username);
+
+/*
+CREATE TABLE audit
+SELECT in_username , in_password;
+*/
+
+
+IF(temp_user_id IS NULL) THEN
+
+SELECT 'User/Password Is Incorrect' AS msg , 0 AS `status`;
+
+ELSE
+
+
+SET temp_password_salt = (SELECT a.PASSWORD_SALT FROM users a WHERE a.ID = temp_user_id);
+SET temp_password = (SELECT a.`PASSWORD` FROM users a WHERE a.ID = temp_user_id);
+
+SET @input_password = (SELECT ngo_password_generator(in_password, temp_password_salt));
+
+IF(@input_password = temp_password) THEN
+
+SELECT 'Login Successful' AS msg , 1 AS `status`;
+
+ELSE
+ 
+SELECT 'User/Password Is Incorrect' AS msg , 0 AS `status`;
+ 
+END IF;
+END IF;
+
+
+END//
+DELIMITER ;
+
+-- Dumping structure for function ngo.ngo_password_generator
+DROP FUNCTION IF EXISTS `ngo_password_generator`;
+DELIMITER //
+CREATE FUNCTION `ngo_password_generator`(
+	`in_password` VARCHAR(50),
+	`in_password_salt` TEXT
+) RETURNS text CHARSET utf8mb4 COLLATE utf8mb4_general_ci
+    COMMENT 'To generate password'
+BEGIN
+
+DECLARE temp_password TEXT;
+
+
+SET temp_password = (SELECT SHA1(CONCAT(in_password,in_password_salt)));
+
+
+RETURN temp_password;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for table ngo.ngo_records
+DROP TABLE IF EXISTS `ngo_records`;
+CREATE TABLE IF NOT EXISTS `ngo_records` (
+  `RECORD_ID` int NOT NULL AUTO_INCREMENT,
+  `RECORD_TYPE` int DEFAULT NULL,
+  `PERSON_COUNT` int DEFAULT NULL,
+  `CREATE_DATE` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `DONATION_TYPE` int DEFAULT NULL,
+  `PRODUCT_ID` int DEFAULT NULL,
+  `QUANTITY` double DEFAULT NULL,
+  `AMOUNT` bigint DEFAULT NULL,
+  `RECORD_DATE` datetime DEFAULT NULL,
+  PRIMARY KEY (`RECORD_ID`),
+  KEY `FK_records_typ` (`RECORD_TYPE`),
+  KEY `FK_donation_typ` (`DONATION_TYPE`),
+  KEY `FK_products_id` (`PRODUCT_ID`),
+  CONSTRAINT `FK_donation_typ` FOREIGN KEY (`DONATION_TYPE`) REFERENCES `donation_type` (`ID`),
+  CONSTRAINT `FK_products_id` FOREIGN KEY (`PRODUCT_ID`) REFERENCES `products` (`ID`),
+  CONSTRAINT `FK_records_typ` FOREIGN KEY (`RECORD_TYPE`) REFERENCES `ngo_records_type` (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='record history for donations and consumptions .';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table ngo.ngo_records_type
+DROP TABLE IF EXISTS `ngo_records_type`;
+CREATE TABLE IF NOT EXISTS `ngo_records_type` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `RECORD_TYPE` varchar(50) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='type of record donation or consumption';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for procedure ngo.ngo_reset_password
+DROP PROCEDURE IF EXISTS `ngo_reset_password`;
+DELIMITER //
+CREATE PROCEDURE `ngo_reset_password`(
+	IN `in_reset_key` TEXT,
+	IN `in_username` VARCHAR(50),
+	IN `in_new_password` VARCHAR(50)
+)
+BEGIN
+
+DECLARE temp_key_check INT;
+DECLARE temp_user_id INT;
+DECLARE temp_password_salt TEXT;
+
+SET temp_key_check = (SELECT COUNT(*) FROM ngo_config WHERE `VALUE` = in_reset_key);
+SET temp_user_id = (SELECT ID FROM users WHERE USER_ID = in_username );
+SET temp_password_salt = (SELECT UUID());
+
+if(ifnull(temp_key_check,0) = 0) THEN
+
+SELECT 'Password Rest Key is Wrong' AS MSG , 0 AS `STATUS`;
+
+ELSE if(ifnull(temp_user_id,'') = '') THEN
+
+SELECT 'Username Not Found' AS MSG , 0 AS `STATUS`;
+
+ELSE
+
+UPDATE users
+SET  PASSWORD_SALT = temp_password_salt,
+    `PASSWORD` = ngo_password_generator(in_new_password, temp_password_salt)
+WHERE ID = temp_user_id;
+
+SELECT 'password changed' AS MSG , 1 AS `STATUS`;
+
+END if;
+END if;
+
+END//
+DELIMITER ;
+
+-- Dumping structure for table ngo.products
+DROP TABLE IF EXISTS `products`;
+CREATE TABLE IF NOT EXISTS `products` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `PRODUCT_NM` varchar(256) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `PRODUCT_CODE` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `PRODUCT_ORDER` int DEFAULT NULL,
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='list of product';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table ngo.product_inventory
+DROP TABLE IF EXISTS `product_inventory`;
+CREATE TABLE IF NOT EXISTS `product_inventory` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `PRODUCT_ID` int DEFAULT NULL,
+  `QUATITY_ADDED` double DEFAULT NULL,
+  `QUANTITY_USED` double DEFAULT NULL,
+  `QUANTITY_PRESENT` double DEFAULT NULL,
+  `LAST_ADDED_DATE` datetime DEFAULT NULL,
+  `LAST_USED_DATE` datetime DEFAULT NULL,
+  PRIMARY KEY (`ID`),
+  KEY `FK_products` (`PRODUCT_ID`),
+  CONSTRAINT `FK_products` FOREIGN KEY (`PRODUCT_ID`) REFERENCES `products` (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='product stats';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table ngo.users
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE IF NOT EXISTS `users` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `USER_ID` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `PASSWORD` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
+  `PASSWORD_SALT` text COLLATE utf8mb4_general_ci,
+  `CREATE_DATE` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `FIRST_NM` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `MIDDLE_NM` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `LAST_NM` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='contains users details .';
+
+-- Data exporting was unselected.
+
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
